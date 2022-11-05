@@ -31,7 +31,7 @@ resource "yandex_compute_instance" "vm-1" {
   }
 
   metadata = {
-    ssh-keys = "ubuntu:${file("~/.ssh/id_rsa.pub")}"
+    ssh-keys = "$(id -u -n):${file("~/.ssh/id_rsa.pub")}"
   }
 }
 
@@ -58,6 +58,6 @@ resource "local_file" "inventory" {
  filename = "./inventory/hosts.ini"
  content = <<EOF
 [hosts]
-${yandex_compute_instance.vm-1.network_interface.0.nat_ip_address} ansible_user=ubuntu
+${yandex_compute_instance.vm-1.network_interface.0.nat_ip_address}
 EOF
 }
