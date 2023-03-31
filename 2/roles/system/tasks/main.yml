@@ -1,0 +1,117 @@
+---
+
+- name: Install epel-release
+  yum:
+    name: "{{ packages }}"
+    state: present
+  vars:
+    packages:
+    - epel-release
+
+- name: Time synchronization
+  shell: "chronyc -a makestep"
+
+- name: Install Additional Packages For ISCSI Server
+  yum:
+    name: "{{ packages }}"
+    state: present
+  vars:
+    packages:
+    - targetcli
+  when: inventory_hostname == 'iscsi'
+
+- name: PCS install
+  yum:
+    name: "{{ packages }}"
+    state: present
+  vars:
+    packages:
+    - device-mapper-multipath
+    - iscsi-initiator-utils
+    - iscsi-initiator-utils-iscsiuio
+    - pcs
+    - pacemaker
+    - gfs2-utils
+    - lvm2-cluster
+    - fence-agents-all
+    - resource-agents
+    - policycoreutils-python
+    - corosync
+    - psmisc
+    - policycoreutils-python
+    - expect
+  when: inventory_hostname is match("pcs*")
+
+- name: Start and Enable PCSD
+  systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  with_items:
+      - pcsd
+  when: inventory_hostname is match("pcs*")
+
+- name: Enable Corosync and Pacemaker Services
+  systemd:
+    name: "{{ item }}"
+    enabled: true
+  with_items:
+      - corosync
+      - pacemaker
+  when: inventory_hostname is match("pcs*")
+
+- name: Enable and Start Target Service
+  systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  with_items:
+      - target
+  when: inventory_hostname == 'iscsi'
+
+- name: Change password hacluster user
+  user:
+        name: hacluster
+        update_password: always
+        password: "{{ 'newpassword' | password_hash('sha512') }}"
+        create_home: yes
+  when: inventory_hostname is match("pcs*")
+  notify:
+  - Restart PCSD
+
+- name: Change initiator name in pcs host 1
+  shell: sed -i "s/:.*/:pcs1/g" /etc/iscsi/initiatorname.iscsi
+  when: inventory_hostname == 'pcs1'
+
+- name: Change initiator name in pcs host 2
+  shell: sed -i "s/:.*/:pcs2/g" /etc/iscsi/initiatorname.iscsi
+  when: inventory_hostname == 'pcs2'
+ 
+- name: Change initiator name in pcs host 3
+  shell: sed -i "s/:.*/:pcs3/g" /etc/iscsi/initiatorname.iscsi
+  when: inventory_hostname == 'pcs3'
+
+- name: Put SELinux in permissive mode, logging actions that would be blocked.
+  ansible.posix.selinux:
+    policy: targeted
+    state: permissive
+
+- name: Add hosts to /etc/hosts
+  ansible.builtin.blockinfile:
+    path: /etc/hosts
+    block: |
+      192.168.33.11 pcs1
+      192.168.33.12 pcs2
+      192.168.33.13 pcs3
+  when: inventory_hostname is match("pcs*")
+
+- name: Add to LVM Confifuration File (Filter)
+  lineinfile:
+    dest: "/etc/lvm/lvm.conf"
+    insertafter: 'devices {'
+    line: '{{ item }}'
+  with_items:
+    - 'global_filter=["a|/dev/mapper/yellow.*|","a|/dev/mapper/mpath.*|","a|/dev/sda.*|","r|.*|"]'
+    - 'filter=["a|/dev/mapper/yellow.*|","a|/dev/mapper/mpath.*|","a|/dev/sda.*|","r|.*|"]'
+  tags: LVM Filter
+  when: inventory_hostname is match("pcs*")

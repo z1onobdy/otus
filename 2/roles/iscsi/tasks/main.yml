@@ -1,0 +1,58 @@
+---
+  - name: Setup targetcli
+    shell: |
+         targetcli /backstores/fileio create disk1 /disk1 500M write_back=false
+         targetcli /iscsi create iqn.2023-03.ru.otus:storage-iscsi.target00
+         targetcli /iscsi/iqn.2023-03.ru.otus:storage-iscsi.target00/tpg1/portals create 0.0.0.0
+         targetcli /iscsi/iqn.2023-03.ru.otus:storage-iscsi.target00/tpg1/luns create /backstores/fileio/disk1 lun=1
+         targetcli /iscsi/iqn.2023-03.ru.otus:storage-iscsi.target00/tpg1 set attribute authentication=0
+         targetcli /iscsi/iqn.2023-03.ru.otus:storage-iscsi.target00/tpg1 set auth userid=otus
+         targetcli /iscsi/iqn.2023-03.ru.otus:storage-iscsi.target00/tpg1 set auth password=otus
+         targetcli /iscsi/iqn.2023-03.ru.otus:storage-iscsi.target00/tpg1/acls create iqn.1994-05.com.redhat:pcs1
+         targetcli /iscsi/iqn.2023-03.ru.otus:storage-iscsi.target00/tpg1/acls create iqn.1994-05.com.redhat:pcs2
+         targetcli /iscsi/iqn.2023-03.ru.otus:storage-iscsi.target00/tpg1/acls create iqn.1994-05.com.redhat:pcs3
+         targetcli saveconfig
+    when: inventory_hostname == 'iscsi'
+
+  - name: Connect iscsi to PCS Servers
+    shell: |
+         iscsiadm -m discovery -t st -p 192.168.33.14
+         iscsiadm -m discovery -t st -p 192.168.34.14
+         iscsiadm -m node -l -T iqn.2023-03.ru.otus:storage-iscsi.target00
+    when: inventory_hostname is match("pcs*")
+
+  - name: "Enable and Start ISCSI Service"
+    systemd:
+      name: "{{ item }}"
+      state: started
+      enabled: true
+    with_items:
+      - iscsi
+    when: inventory_hostname is match("pcs*")
+
+  - name: Setup multipath in PCS Servers
+    shell: |
+        mpathconf --enable --with_multipathd y 
+    when: inventory_hostname is match("pcs*")
+
+  - name: Copy multipath conf file
+    ansible.builtin.copy:
+      src: ./roles/iscsi/files/multipath.conf
+      dest: /etc/multipath.conf
+      follow: yes
+    when: inventory_hostname is match("pcs*")
+
+  - name: Setup multipath in PCS Servers
+    shell: |
+        wwid=`/usr/lib/udev/scsi_id --whitelisted --replace-whitespace --device=/dev/sda`
+        sed -i "s/wwid*.*/wwid $wwid/g" /etc/multipath.conf
+    when: inventory_hostname is match("pcs*")
+
+  - name: "Enable and Start Multipathd Service"
+    systemd:
+      name: "{{ item }}"
+      state: restarted
+      enabled: true
+    with_items:
+      - multipathd
+    when: inventory_hostname is match("pcs*")

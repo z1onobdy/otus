@@ -1,0 +1,22 @@
+---
+- name: System config
+  hosts: all
+  gather_facts: true
+  become: true
+  roles:
+    - system      
+  
+- name: iSCSI
+  hosts: all
+  gather_facts: true
+  become: true
+  roles:
+    - iscsi
+
+- name: PCM Config
+  hosts: all
+  gather_facts: true
+  become: true
+  roles:
+    - pcs
+...
