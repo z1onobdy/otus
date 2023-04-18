@@ -1,0 +1,11 @@
+- name: Restart keepalived
+  service:
+    name: keepalived
+    state: restarted
+    enabled: true
+
+- name: Restart nginx
+  service:
+    name: nginx
+    state: restarted
+    enabled: true

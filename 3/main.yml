@@ -1,0 +1,29 @@
+---
+- name: System config
+  hosts: all
+  gather_facts: true
+  become: true
+  roles:
+    - system      
+  
+- name: Frontend config
+  hosts: all
+  gather_facts: true
+  become: true
+  roles:
+    - frontend
+
+- name: DB config
+  hosts: all
+  gather_facts: true
+  become: true
+  roles:
+    - db
+
+- name: Backend config
+  hosts: all
+  gather_facts: true
+  become: true
+  roles:
+    - backend
+...

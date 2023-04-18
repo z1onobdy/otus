@@ -1,0 +1,33 @@
+---
+  - name: Backend configuration
+    block:
+    - name: Configure php-fpm
+      community.general.ini_file:
+        path: /etc/php-fpm.d/www.conf
+        section: www
+        option: listen
+        value: '8080'
+
+    - name: Configure php-fpm
+      community.general.ini_file:
+        path: /etc/php-fpm.d/www.conf
+        section: www
+        option: listen.allowed_clients
+        state: absent
+
+    - name: Copy index.php
+      copy:
+        src: ./files/index.php
+        dest: /usr/share/nginx/html/
+    
+    - name: Start php-fpm
+      service:
+        name: php-fpm
+        state: started
+        enabled: true
+
+    - name: Set hostname
+      hostname:
+        name: "{{ inventory_hostname }}"
+
+    when: inventory_hostname is match("backend*")
