@@ -1,0 +1,67 @@
+---
+  - name: Configure a DB
+    block:
+    - name: Start MySQL
+      service:
+        name: mysqld
+        state: started
+        enabled: true
+
+    - name: "Install PyMySQL python module from pip"
+      pip:
+        name: PyMySQL==0.10.0
+
+    - name: "Check MySQL root password config"
+      stat:
+        path: "/root/.my.cnf"
+      register: mysql_root_mycnf
+    
+    - name: "Get temporary password"
+      shell: "grep 'A temporary password is generated for' /var/log/mysqld.log| awk -F: '{print $4}'|tr -d ' '"
+      register: mysql_temp_password
+      when: mysql_root_mycnf.stat.exists == false
+  
+    - name: "Generate root password"
+      set_fact:
+        mysql_root_password: "{{ lookup('password', '/dev/null length=20 chars=ascii_letters,digits,punctuation') }}"
+      when: mysql_root_mycnf.stat.exists == false
+  
+    - name: "Set root password"
+      shell: >
+        mysql --connect-expired-password -uroot -p'{{ mysql_temp_password.stdout }}' -NBe
+        'ALTER USER "{{ mysql_root_username }}"@"localhost"
+        IDENTIFIED WITH mysql_native_password BY "{{ mysql_root_password }}"; FLUSH PRIVILEGES;'
+      when: mysql_root_mycnf.stat.exists == false
+  
+    - name: "Set /root/.my.cnf config"
+      template:
+        src: "mysql-root-my.cnf.j2"
+        dest: "/root/.my.cnf"
+        owner: root
+        group: root
+        mode: 0600
+      when: mysql_root_mycnf.stat.exists == false
+
+    - name: "Set /etc/my.cnf config"
+      template:
+        src: "my.cnf.j2"
+        dest: "/etc/my.cnf"
+        owner: root
+        group: root
+        mode: 0644
+      notify: Restart mysqld
+
+    - name: Create dbuser
+      community.mysql.mysql_user:
+        name: mysql
+        host: '%'
+        password: mysql1234
+        plugin: mysql_native_password
+      when: mysql_root_mycnf.stat.exists == false
+    
+
+    - name: Set hostname
+      hostname:
+        name: "{{ inventory_hostname }}"
+
+    when: inventory_hostname is match("db*")

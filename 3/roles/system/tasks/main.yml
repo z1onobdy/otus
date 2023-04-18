@@ -1,0 +1,90 @@
+---
+
+- name: Install epel-release
+  yum:
+    name: "{{ packages }}"
+    state: present
+  vars:
+    packages:
+    - epel-release
+
+- name: Time synchronization
+  shell: "chronyc -a makestep"
+
+- name: Disable firewall
+  service:
+    name: firewalld
+    state: stopped
+    enabled: false
+
+- name: Disable SELinux
+  lineinfile:
+    path: /etc/sysconfig/selinux
+    line: SELINUX=disabled
+    regexp: '^SELINUX='
+  register: selinux
+
+- name: Reboot
+  ansible.builtin.reboot:
+  when: selinux.changed
+
+- name: nginx and keepalived install
+  yum:
+    name: "{{ packages }}"
+    state: present
+  vars:
+    packages:
+    - keepalived
+    - nginx
+  when: inventory_hostname is match("frontend*")
+
+- name: backend configuration
+  yum:
+    name: "{{ packages }}"
+    state: present
+  vars:
+    packages:
+    - mysql
+    - php
+    - php-mysqlnd
+    - php-fpm
+  when: inventory_hostname is match("backend*")
+
+# - name: DB configuration
+#   yum: 
+#     name: "{{ packages }}"
+#     state: present
+#   vars:
+#     packages:
+#     - mysql
+#     - python3-mysqlclient
+#   when: inventory_hostname is match("db*")
+
+- name: "Get temporary password"
+  shell: "cd /tmp && curl -sSLO https://dev.mysql.com/get/mysql80-community-release-el7-5.noarch.rpm"
+  when: inventory_hostname is match("db*")
+
+- name: "Install mysql server"
+  yum:
+    name: /tmp/mysql80-community-release-el7-5.noarch.rpm
+    state: present
+  when: inventory_hostname is match("db*")
+
+- name: DB configuration
+  yum: 
+    name: "{{ packages }}"
+    state: present
+  vars:
+    packages:
+    - mysql-server
+    - mysql-connector-python
+    - python-pip
+  when: inventory_hostname is match("db*")
+
+- name: Start MySQL
+  service:
+    name: mysqld
+    state: started
+    enabled: true
+  when: inventory_hostname is match("db*")
+

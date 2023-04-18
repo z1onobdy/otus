@@ -1,0 +1,48 @@
+---
+  - name: Configure a frontend
+    block:
+    - name: keepalived configuration
+      template:
+        src: ./templates/keepalived.conf.j2
+        dest: /etc/keepalived/keepalived.conf
+        mode: "0644"
+        owner: root
+        group: root
+      notify: Restart keepalived
+    
+    - name: keepalived service enable and systemd daemon reload"
+      systemd:
+        name: keepalived
+        enabled: yes
+        daemon_reload: yes
+      notify: Restart keepalived
+    
+    - name: keepalived start 
+      service:
+        name: keepalived
+        state: started
+        enabled: true
+
+    - name: nginx configuration
+      copy:
+        src: ./files/nginx.conf
+        dest: /etc/nginx/
+      notify: Restart nginx
+
+    - name: nginx service enable and systemd daemon reload"
+      systemd:
+        name: nginx
+        enabled: yes
+        daemon_reload: yes
+      notify: Restart nginx
+
+    - name: nginx start 
+      service:
+        name: nginx
+        state: started
+        enabled: true
+
+    - name: Set hostname
+      hostname:
+        name: "{{ inventory_hostname }}"
+    when: inventory_hostname is match("frontend*")
