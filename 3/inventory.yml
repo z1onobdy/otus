@@ -1,0 +1,38 @@
+all:
+  hosts:
+  children:
+    frontend:
+      hosts:
+        frontend1:
+          ansible_host: 192.168.33.14
+          ansible_user: vagrant
+          vrrp_state: "MASTER"
+          vrrp_priority: "101"
+
+        frontend2:
+          ansible_host: 192.168.33.15
+          ansible_user: vagrant
+          vrrp_state: "SLAVE"
+          vrrp_priority: "100"
+      vars:
+        hostname_prefix: frontend
+        start_number: 1
+
+    backend:
+      hosts:
+        backend1:
+          ansible_host: 192.168.33.16
+          ansible_user: vagrant
+      vars:
+        hostname_prefix: backend
+        start_number: 1
+    
+    db:
+      hosts:
+        db1:
+          ansible_host: 192.168.33.17
+          ansible_user: vagrant
+      vars:
+        hostname_prefix: db
+        start_number: 1
+    
