@@ -1,0 +1,85 @@
+Vagrant.configure("2") do |config|
+  # Create Ansible host
+
+  
+  config.vm.define "ansible" do |ansible|
+    # ansible.vm.synced_folder  ".", "/vagrant", type: "rsync", rsync_auto: "true"
+    ansible.vm.box = "ubuntu/jammy"
+    ansible.vm.network "private_network", ip: "192.168.33.10"
+    ansible.vm.provider "virtualbox" do |vb|
+      vb.memory = "1024"
+    end
+
+    # Create Ansible user and copy RSA key
+    ansible.vm.provision "shell", inline: <<-SHELL
+    # sudo yum install epel-release -y
+    # sudo apt install ansible -y
+    # sleep 10
+    # sudo yum install ansible -y
+    ssh-keygen -q -f /home/vagrant/.ssh/id_rsa -C vagrant -N '' 
+    chown -R vagrant:vagrant /home/vagrant/.ssh
+    chmod 700 /home/vagrant/.ssh
+    chmod 600 /home/vagrant/.ssh/*
+    sudo cp -R /home/vagrant/.ssh/id_rsa.pub /vagrant/
+    apt update
+    apt install ansible -y
+
+    SHELL
+  end
+
+  # Create 2 frontend VMs with a 20GB disk and private network
+  (1..2).each do |i|
+    config.vm.define "fe#{i}" do |fe|
+      fe.vm.box = "centos/7"
+      fe.vm.network "private_network", ip: "192.168.33.#{13+i}"
+      fe.vm.provider "virtualbox" do |vb|
+        vb.memory = "1024"
+      
+      end
+      fe.vm.provision "file", source: "id_rsa.pub", destination: "/home/vagrant/.ssh/"
+      fe.vm.provision "shell", inline: <<-SHELL
+      cat /vagrant/id_rsa.pub >> /home/vagrant/.ssh/authorized_keys
+      chown -R vagrant:vagrant /home/vagrant/.ssh
+      chmod 700 /home/vagrant/.ssh
+      chmod 600 /home/vagrant/.ssh/*
+      SHELL
+      fe.vm.provision "file", source: "id_rsa.pub", destination: "/home/vagrant/.ssh/id_rsa_ansible.pub"
+    end
+  end
+
+  config.vm.define "be" do |be|
+    be.vm.box = "centos/7"
+    be.vm.network "private_network", ip: "192.168.33.16"
+    be.vm.provider "virtualbox" do |vb|
+      vb.memory = "1024"
+      
+    end
+    be.vm.provision "file", source: "id_rsa.pub", destination: "/home/vagrant/.ssh/"
+    be.vm.provision "shell", inline: <<-SHELL
+      cat /vagrant/id_rsa.pub >> /home/vagrant/.ssh/authorized_keys
+      chown -R vagrant:vagrant /home/vagrant/.ssh
+      chmod 700 /home/vagrant/.ssh
+      chmod 600 /home/vagrant/.ssh/*
+      SHELL
+      be.vm.provision "file", source: "id_rsa.pub", destination: "/home/vagrant/.ssh/id_rsa_ansible.pub"
+    end
+
+    config.vm.define "db" do |db|
+    db.vm.box = "centos/7"
+    db.vm.network "private_network", ip: "192.168.33.17"
+    db.vm.provider "virtualbox" do |vb|
+      vb.memory = "1024"
+      
+    end
+    db.vm.provision "file", source: "id_rsa.pub", destination: "/home/vagrant/.ssh/"
+    db.vm.provision "shell", inline: <<-SHELL
+      cat /vagrant/id_rsa.pub >> /home/vagrant/.ssh/authorized_keys
+      chown -R vagrant:vagrant /home/vagrant/.ssh
+      chmod 700 /home/vagrant/.ssh
+      chmod 600 /home/vagrant/.ssh/*
+      SHELL
+      db.vm.provision "file", source: "id_rsa.pub", destination: "/home/vagrant/.ssh/id_rsa_ansible.pub"
+    end
+
+  
+end
