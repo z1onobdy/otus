@@ -1,0 +1,217 @@
+---
+
+- name: Install epel-release
+  yum:
+    name: "{{ packages }}"
+    state: present
+  vars:
+    packages:
+    - epel-release
+
+- name: Time synchronization
+  shell: "chronyc -a makestep"
+
+- name: Disable firewall
+  service:
+    name: firewalld
+    state: stopped
+    enabled: false
+
+- name: Disable SELinux
+  lineinfile:
+    path: /etc/sysconfig/selinux
+    line: SELINUX=disabled
+    regexp: '^SELINUX='
+  register: selinux
+
+- name: Reboot
+  ansible.builtin.reboot:
+  when: selinux.changed
+
+# - name: Generate /etc/hosts file
+#   template:
+#     src=etc/hosts.j2
+#     dest=/etc/hosts
+
+- name: "Install Percona repo"
+  yum:
+    name: "https://repo.percona.com/yum/percona-release-latest.noarch.rpm"
+    disable_gpg_check: yes
+    state: present
+
+- name: "Check Percona 8 repo"
+  shell: "percona-release enable-only pxc-80 release"
+
+- name: "Check Percona 8 repo"
+  shell: "percona-release enable tools release"
+
+- name: "Check Percona Server 8 installed"
+  yum:
+    name:
+      - percona-xtradb-cluster
+      - python-pip
+    state: present
+
+- name: "Install PyMySQL python module from pip"
+  pip:
+    name: PyMySQL==0.10.0
+
+- name: "Check MySQL root password config"
+  stat:
+    path: "/root/.my.cnf"
+  register: mysql_root_mycnf
+
+- name: Start MySQL
+  service:
+    name: mysql
+    state: started
+    enabled: true
+  when: mysql_root_mycnf.stat.exists == false
+
+- name: "Get temporary password"
+  shell: "grep 'A temporary password is generated for' /var/log/mysqld.log| awk -F: '{print $4}'|tr -d ' '"
+  register: mysql_temp_password
+  when: mysql_root_mycnf.stat.exists == false
+
+# - name: "Generate root password"
+#   run_once: true
+#   set_fact:
+#     mysql_root_password: "{{ lookup('password', '/dev/null length=20 chars=ascii_letters,digits,punctuation') }}"
+#   when: mysql_root_mycnf.stat.exists == false
+
+- name: "Set root password"
+  shell: >
+    mysql --connect-expired-password -uroot -p'{{ mysql_temp_password.stdout }}' -NBe
+    'ALTER USER "{{ mysql_root_username }}"@"localhost"
+    IDENTIFIED WITH mysql_native_password BY "{{ mysql_root_password }}"; FLUSH PRIVILEGES;'
+  when: mysql_root_mycnf.stat.exists == false
+
+- name: Create dbuser
+  community.mysql.mysql_user:
+    login_user: root
+    login_password: "{{ mysql_root_password }}"
+    login_host: 127.0.0.1
+    name: mysql
+    host: '%'
+    password: 'Mysql1234$pokgd9&78)'
+    plugin: mysql_native_password
+    priv: '*.*:ALL'
+  when: 
+    - mysql_root_mycnf.stat.exists == false
+    - inventory_hostname is match("pxc1")  
+
+- name: "Set /root/.my.cnf config"
+  template:
+    src: "mysql-root-my.cnf.j2"
+    dest: "/root/.my.cnf"
+    owner: root
+    group: root
+    mode: 0600
+  when: mysql_root_mycnf.stat.exists == false
+
+- name: Stop MySQL
+  service:
+    name: mysql
+    state: stopped
+  # when: mysql_root_mycnf.stat.exists == false
+
+- name: "Set /etc/my.cnf config"
+  template:
+    src: "my.cnf.j2"
+    dest: "/etc/my.cnf"
+    owner: root
+    group: root
+    mode: 0644
+
+- name: Bootstrap the first node
+  service:
+    name: mysql@bootstrap
+    state: started
+  when: 
+    - inventory_hostname is match("pxc1")
+    # - mysql_root_mycnf.stat.exists == false
+
+- name: Start other nodes
+  service:
+    name: mysql
+    state: started
+  when: 
+    - inventory_hostname != "pxc1"
+    # - mysql_root_mycnf.stat.exists == false
+
+
+
+- name: Stop MySQL bootstrap
+  service:
+    name: mysql@bootstrap
+    state: stopped
+  when: 
+    - inventory_hostname is match("pxc1")
+    # - mysql_root_mycnf.stat.exists == false
+
+- name: Start the first node
+  service:
+    name: mysql
+    state: started
+  when: 
+    - inventory_hostname is match("pxc1")
+    # - mysql_root_mycnf.stat.exists == false
+
+- name: Check cluster status
+  community.mysql.mysql_query:
+    login_host: 127.0.0.1
+    login_user: mysql
+    login_password: 'Mysql1234$pokgd9&78)'
+    query:
+    - SHOW STATUS LIKE 'wsrep_cluster%'
+  register: cluster_status_all
+
+- debug: msg="{{ cluster_status_all.query_result }}"
+
+- name: Pause for 10 sec
+  ansible.builtin.pause:
+    seconds: 10
+
+- name: Create a database
+  community.mysql.mysql_db:
+    login_host: 127.0.0.1
+    login_user: mysql
+    login_password: 'Mysql1234$pokgd9&78)'
+    name: otus_test
+  when: 
+    # - mysql_root_mycnf.stat.exists == false
+    - inventory_hostname is match("pxc2")
+
+- name: Pause for 10 sec
+  ansible.builtin.pause:
+    seconds: 10
+
+- name: Create a table and a record
+  community.mysql.mysql_query:
+    login_host: 127.0.0.1
+    login_user: mysql
+    login_password: 'Mysql1234$pokgd9&78)'
+    login_db: otus_test
+    query:
+    - CREATE TABLE IF NOT EXISTS otustest (id SERIAL PRIMARY KEY, name VARCHAR(100))
+    - INSERT INTO otustest (name) VALUES ("Otus")
+  when: 
+    # - mysql_root_mycnf.stat.exists == false
+    - inventory_hostname is match("pxc3")
+
+- name: Create a table and a record
+  community.mysql.mysql_query:
+    login_host: 127.0.0.1
+    login_user: mysql
+    login_password: 'Mysql1234$pokgd9&78)'
+    login_db: otus_test
+    query:
+    - 'SELECT * FROM otustest'
+  when: 
+    # - mysql_root_mycnf.stat.exists == false
+    - inventory_hostname is match("pxc3")
+  register: print_result
+
+- debug: msg="{{ print_result.query_result }}"
+  when: 
+    - inventory_hostname is match("pxc3")

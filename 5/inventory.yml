@@ -1,0 +1,25 @@
+all:
+  hosts:
+  children:
+    pxc:
+      hosts:
+        pxc1:
+          ansible_host: 192.168.33.14
+          ansible_user: vagrant
+          mysql_root_password: "MySQLroot1919237.)-"
+
+        pxc2:
+          ansible_host: 192.168.33.15
+          ansible_user: vagrant
+          mysql_root_password: "MySQLroot1919237.)-"
+
+        pxc3:
+          ansible_host: 192.168.33.16
+          ansible_user: vagrant
+          mysql_root_password: "MySQLroot1919237.)-"
+
+    proxysql:
+      hosts:
+        proxysql:
+          ansible_host: 192.168.33.17
+          ansible_user: vagrant
